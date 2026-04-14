@@ -1,31 +1,18 @@
-from ryu.base import app_manager
-from ryu.controller import ofp_event
-from ryu.controller.handler import MAIN_DISPATCHER, CONFIG_DISPATCHER
-from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_3
-from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet, arp, ipv4, tcp, udp
-from ryu.lib.packet import ether_types
-
 import csv
 import time
 from threading import Thread
+from ryu.base import app_manager
+from ryu.controller import ofp_event
+from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER, set_ev_cls
+from ryu.ofproto import ofproto_v1_3
+from ryu.lib.packet import packet, ethernet, ether_types, ipv4, tcp, udp, arp
 
-
-class SDNAssessmentController(app_manager.RyuApp):
-    """
-    A controller application for the Ryu SDN controller based on the SDN Assessment.
-    Proactively installs flows for TCP/UDP between hosts and the Server.
-    Monitors traffic statistics on sw5.
-    """
+class SDNController(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
-    # ##### SECTION -1 #################
-
     def __init__(self, *args, **kwargs):
-        super(SDNAssessmentController, self).__init__(*args, **kwargs)
+        super(SDNController, self).__init__(*args, **kwargs)
         self.datapaths = {}
-
         # Start the monitoring thread
         self.monitor_thread = Thread(target=self._monitor)
         self.monitor_thread.daemon = True
@@ -37,9 +24,8 @@ class SDNAssessmentController(app_manager.RyuApp):
         self.csv_writer.writerow(['timestamp', 'flow_match', 'byte_count', 'packet_count'])
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    def switch_features_handler(self, event):
-        print(" *** in feature handler *** ")
-        datapath = event.msg.datapath
+    def switch_features_handler(self, ev):
+        datapath = ev.msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         dpid = datapath.id
@@ -54,17 +40,33 @@ class SDNAssessmentController(app_manager.RyuApp):
         # Proactively install flow rules for allowed traffic
         self.install_proactive_flows(datapath)
 
-    # ######### SECTION -2 ###############
+    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        if buffer_id:
+            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
+                                    priority=priority, match=match,
+                                    instructions=inst)
+        else:
+            mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
+                                    match=match, instructions=inst)
+        datapath.send_msg(mod)
 
     def install_proactive_flows(self, datapath):
         dpid = datapath.id
         parser = datapath.ofproto_parser
         ofproto = datapath.ofproto
 
+        # Define port mappings based on our deterministic topology.py
+        # Server is 10.0.0.11
+        # H1 is 10.0.0.1, H2 is 10.0.0.2, mgmt is 10.0.0.254
+        
         # Allow ARP everywhere (broadcast)
-        match_arp = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_ARP)
-        actions_arp = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.add_flow(datapath, 10, match_arp, actions_arp)
+        self.add_flow(datapath, priority=10, 
+                      match=parser.OFPMatch(eth_type=ether_types.ETH_TYPE_ARP),
+                      actions=[parser.OFPActionOutput(ofproto.OFPP_FLOOD)])
 
         # IPs
         ip_server = '10.0.0.11'
@@ -72,24 +74,51 @@ class SDNAssessmentController(app_manager.RyuApp):
         ip_h2 = '10.0.0.2'
         ip_mgmt = '10.0.0.254'
         
+        # Routing logic (Paths):
+        # h1 <-> sw1 <-> sw3 <-> sw5 <-> server
+        # h2 <-> sw2 <-> sw4 <-> sw5 <-> server
+        # mgmt <-> sw5 <-> server
+        
         # We process each DPID to push exact flow entries
+        
         if dpid == 1:
+            # SW1
+            # 1:h1, 2:sw3, 3:sw4
+            # h1 to Server (out port 2)
             self._add_tcp_udp_flows(datapath, ip_h1, ip_server, 2)
+            # Server to h1 (out port 1)
             self._add_tcp_udp_flows(datapath, ip_server, ip_h1, 1)
 
         elif dpid == 2:
+            # SW2
+            # 1:h2, 2:sw3, 3:sw4
+            # h2 to Server (out port 3 to sw4 for Traffic Engineering!) 
+            # Or out port 2 to sw3 if we want them to share sw3.
+            # Let's use separate paths for traffic engineering (B4).
             self._add_tcp_udp_flows(datapath, ip_h2, ip_server, 3)
+            # Server to h2 (out port 1)
             self._add_tcp_udp_flows(datapath, ip_server, ip_h2, 1)
 
         elif dpid == 3:
+            # SW3
+            # 1:sw5, 2:sw1, 3:sw2
+            # sw1(h1) to Server (out port 1)
             self._add_tcp_udp_flows(datapath, ip_h1, ip_server, 1)
+            # Server to sw1(h1) (out port 2)
             self._add_tcp_udp_flows(datapath, ip_server, ip_h1, 2)
 
         elif dpid == 4:
+            # SW4
+            # 1:sw5, 2:sw1, 3:sw2
+            # sw2(h2) to Server (out port 1)
             self._add_tcp_udp_flows(datapath, ip_h2, ip_server, 1)
+            # Server to sw2(h2) (out port 3)
             self._add_tcp_udp_flows(datapath, ip_server, ip_h2, 3)
 
         elif dpid == 5:
+            # SW5
+            # 1:mgmt, 2:server, 3:sw3, 4:sw4
+            
             # mgmt <-> server
             self._add_tcp_udp_flows(datapath, ip_mgmt, ip_server, 2)
             self._add_tcp_udp_flows(datapath, ip_server, ip_mgmt, 1)
@@ -113,7 +142,7 @@ class SDNAssessmentController(app_manager.RyuApp):
             ipv4_dst=ip_dst,
             ip_proto=6 # TCP
         )
-        self.add_flow(datapath, 100, match_tcp, actions)
+        self.add_flow(datapath, priority=100, match=match_tcp, actions=actions)
         
         # UDP priority 100
         match_udp = parser.OFPMatch(
@@ -122,29 +151,7 @@ class SDNAssessmentController(app_manager.RyuApp):
             ipv4_dst=ip_dst,
             ip_proto=17 # UDP
         )
-        self.add_flow(datapath, 100, match_udp, actions)
-
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
-        """Install a flow rule on the datapath."""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        idle_timeout = 0
-        hard_timeout = 0
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        if buffer_id:
-            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
-                                    priority=priority,
-                                    idle_timeout=idle_timeout,
-                                    hard_timeout=hard_timeout,
-                                    match=match, instructions=inst)
-        else:
-            mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-                                    match=match,
-                                    idle_timeout=idle_timeout,
-                                    hard_timeout=hard_timeout,
-                                    instructions=inst)
-        self.logger.info("added flow for %s", mod)
-        datapath.send_msg(mod)
+        self.add_flow(datapath, priority=100, match=match_udp, actions=actions)
 
     def _monitor(self):
         while True:
@@ -156,9 +163,9 @@ class SDNAssessmentController(app_manager.RyuApp):
                 datapath.send_msg(req)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def flow_stats_reply_handler(self, event):
-        body = event.msg.body
-        dpid = event.msg.datapath.id
+    def flow_stats_reply_handler(self, ev):
+        body = ev.msg.body
+        dpid = ev.msg.datapath.id
         
         if dpid != 5:
             return

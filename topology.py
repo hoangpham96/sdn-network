@@ -7,7 +7,7 @@ from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 from mininet.link import TCLink
 
-class SDNAssessmentTopo(Topo):
+class SDNTopo(Topo):
     def build(self):
         # Add Hosts
         h1 = self.addHost('h1', ip='10.0.0.1/24', mac='00:00:00:00:00:01')
@@ -37,7 +37,7 @@ class SDNAssessmentTopo(Topo):
         self.addLink(sw4, sw2, bw=100, delay='2ms')   # 100 Mbps
 
 def run():
-    topo = SDNAssessmentTopo()
+    topo = SDNTopo()
     # Use TCLink to support bandwidth and delay parameters
     net = Mininet(topo=topo, controller=RemoteController, switch=OVSSwitch, link=TCLink)
     
