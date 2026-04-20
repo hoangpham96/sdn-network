@@ -49,9 +49,11 @@ if __name__ == '__main__':
     net.start()
     net.staticArp()
 
-    # Enable Spanning Tree Protocol (STP) on the OVS bridges (ovs-vsctl set bridge s1 stp_enable=true)"
+    # STP is disabled: proactive OpenFlow flows + staticArp() already provide
+    # loop-free forwarding. STP would block redundant inter-switch links and
+    # prevent flows from using them.
     for sw in net.switches:
-        sw.cmd('ovs-vsctl set bridge {} stp_enable=true'.format(sw.name))
+        sw.cmd('ovs-vsctl set bridge {} stp_enable=false'.format(sw.name))
     
     CLI(net)
 
