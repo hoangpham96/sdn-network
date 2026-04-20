@@ -128,35 +128,52 @@ class SDNController(app_manager.RyuApp):
 
         if dpid == 1:
             # SW1
+            # h1 <-> server (via sw3, port 2)
             self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=2)
             self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=1)
             # h1 <-> h2 via sw3
             self._add_ip_flows(datapath, ip_h1,      ip_h2,    out_port=2)
             self._add_ip_flows(datapath, ip_h2,      ip_h1,    out_port=1)
+            # h1 <-> mgmt via sw3 -> sw5
+            self._add_ip_flows(datapath, ip_h1,      ip_mgmt,  out_port=2)
+            self._add_ip_flows(datapath, ip_mgmt,    ip_h1,    out_port=1)
 
         elif dpid == 2:
             # SW2 — h2 uses sw4 path (traffic engineering: keeps h1/h2 on separate core links)
+            # h2 <-> server (via sw5, port 2)
             self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=3)
             self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=1)
             # h1 <-> h2 via sw3
             self._add_ip_flows(datapath, ip_h1,      ip_h2,    out_port=1)
             self._add_ip_flows(datapath, ip_h2,      ip_h1,    out_port=2)
+            # h2 <-> mgmt via sw4 -> sw5
+            self._add_ip_flows(datapath, ip_h2,      ip_mgmt,  out_port=3)
+            self._add_ip_flows(datapath, ip_mgmt,    ip_h2,    out_port=1)
 
         elif dpid == 3:
             # SW3 — carries h1 traffic only
+            # h1 <-> server (via sw5, port 1)
             self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=1)
             self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=2)
             # h1 <-> h2 via sw3
             self._add_ip_flows(datapath, ip_h1,      ip_h2,    out_port=3)
             self._add_ip_flows(datapath, ip_h2,      ip_h1,    out_port=2)
+            # h1 <-> mgmt via sw3 -> sw5
+            self._add_ip_flows(datapath, ip_h1,      ip_mgmt,  out_port=1)
+            self._add_ip_flows(datapath, ip_mgmt,    ip_h1,    out_port=2)
 
         elif dpid == 4:
             # SW4 — carries h2 traffic only
+            # h2 <-> server (via sw5, port 2)
             self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=1)
             self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=3)
+            # h2 <-> mgmt via sw4 -> sw5
+            self._add_ip_flows(datapath, ip_h2,      ip_mgmt,  out_port=1)
+            self._add_ip_flows(datapath, ip_mgmt,    ip_h2,    out_port=3)
 
         elif dpid == 5:
             # SW5 — hub switch
+            # B4: optionally install a meter to rate-limit UDP traffic before referencing it in flow entries
             meter = None
             if ENABLE_B4:
                 # Install UDP meter before referencing it in flow entries
@@ -174,6 +191,14 @@ class SDNController(app_manager.RyuApp):
             # h2 <-> server (via sw4, port 4)
             self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=2, udp_meter_id=meter)
             self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=4, udp_meter_id=meter)
+
+            # h1 <-> mgmt (h1 arrives via sw3, port 3)
+            self._add_ip_flows(datapath, ip_h1,      ip_mgmt,  out_port=1)
+            self._add_ip_flows(datapath, ip_mgmt,    ip_h1,    out_port=3)
+
+            # h2 <-> mgmt (h2 arrives via sw4, port 4)
+            self._add_ip_flows(datapath, ip_h2,      ip_mgmt,  out_port=1)
+            self._add_ip_flows(datapath, ip_mgmt,    ip_h2,    out_port=4)
 
     def _add_ip_flows(self, datapath, ip_src, ip_dst, out_port, udp_meter_id=None):
         """Install TCP, UDP, and ICMP flow entries for a src→dst pair.
