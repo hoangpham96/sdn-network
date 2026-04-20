@@ -1,7 +1,0 @@
-[project]
-name = "sdn-network"
-version = "0.1.0"
-description = "An OpenFlow-based SDN network for an Enterprise Environment"
-readme = "README.md"
-requires-python = ">=3.14"
-dependencies = []
