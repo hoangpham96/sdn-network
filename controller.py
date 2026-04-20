@@ -9,7 +9,7 @@ from ryu.lib.packet import packet, ethernet, ether_types, ipv4, tcp, udp, arp
 
 # Set to True to enable B4 traffic engineering (UDP rate-limiting via OpenFlow meter).
 # Set to False to test baseline behaviour without any TE enforcement.
-ENABLE_B4 = True
+ENABLE_B4 = False
 
 # Meter ID used to rate-limit UDP traffic on sw5 (B4 traffic engineering)
 UDP_METER_ID = 1
