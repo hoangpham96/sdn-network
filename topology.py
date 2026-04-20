@@ -36,39 +36,36 @@ class SDNTopo(Topo):
         self.addLink(sw4, sw1, bw=100, delay='2ms')   # 100 Mbps
         self.addLink(sw4, sw2, bw=100, delay='2ms')   # 100 Mbps
 
-topos = {'mytopo': (lambda: SDNTopo())}
-
-# def run():
-#     topos = {'mytopo': (lambda: MyTopo())}
-
-#     # Use TCLink to support bandwidth and delay parameters
-#     net = Mininet(topo=topo, controller=RemoteController, switch=OVSSwitch, link=TCLink)
+def run():
+    topo = SDNTopo()
+    # Use TCLink to support bandwidth and delay parameters
+    net = Mininet(topo=topo, controller=RemoteController, switch=OVSSwitch, link=TCLink)
     
-#     # Start network
-#     net.start()
+    # Start network
+    net.start()
 
-#     # The assignment mentions "Spanning Tree Protocol (STP) on OVS bridges" as a pointer
-#     # So we should run it via mininet to avoid loops, or Ryu can handle STP.
-#     # The pointer: "Enable Spanning Tree Protocol (STP) on the OVS bridges (ovs-vsctl set bridge s1 stp_enable=true)"
-#     for sw in net.switches:
-#         sw.cmd('ovs-vsctl set bridge {} stp_enable=true'.format(sw.name))
+    # The assignment mentions "Spanning Tree Protocol (STP) on OVS bridges" as a pointer
+    # So we should run it via mininet to avoid loops, or Ryu can handle STP.
+    # The pointer: "Enable Spanning Tree Protocol (STP) on the OVS bridges (ovs-vsctl set bridge s1 stp_enable=true)"
+    for sw in net.switches:
+        sw.cmd('ovs-vsctl set bridge {} stp_enable=true'.format(sw.name))
 
-#     # A2. Host and Server Setup
-#     info('*** Starting simple HTTP server on Server\n')
-#     server = net.get('server')
-#     # Run the HTTP server in the background
-#     server.cmd('python3 -m http.server 80 &')
+    # A2. Host and Server Setup
+    info('*** Starting simple HTTP server on Server\n')
+    server = net.get('server')
+    # Run the HTTP server in the background
+    server.cmd('python3 -m http.server 80 &')
 
-#     # A3. Topology Correctness
-#     info('*** Topology is running. Use net or dump to verify.\n')
+    # A3. Topology Correctness
+    info('*** Topology is running. Use net or dump to verify.\n')
     
-#     CLI(net)
+    CLI(net)
 
-#     # Teardown
-#     info('*** Stopping HTTP server\n')
-#     server.cmd('kill %python3')
-#     net.stop()
+    # Teardown
+    info('*** Stopping HTTP server\n')
+    server.cmd('kill %python3')
+    net.stop()
 
-# if __name__ == '__main__':
-#     setLogLevel('info')
-#     run()
+if __name__ == '__main__':
+    setLogLevel('info')
+    run()
