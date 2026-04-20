@@ -7,6 +7,10 @@ from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER, set_ev_cl
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet, ethernet, ether_types, ipv4, tcp, udp, arp
 
+# Set to True to enable B4 traffic engineering (UDP rate-limiting via OpenFlow meter).
+# Set to False to test baseline behaviour without any TE enforcement.
+ENABLE_B4 = True
+
 # Meter ID used to rate-limit UDP traffic on sw5 (B4 traffic engineering)
 UDP_METER_ID = 1
 # UDP rate cap in kbps — 50 Mbps keeps UDP from starving TCP on shared 100 Mbps edge links
@@ -142,20 +146,24 @@ class SDNController(app_manager.RyuApp):
             self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=3)
 
         elif dpid == 5:
-            # SW5 — hub switch; install UDP meter first, then reference it on UDP flows
-            self._install_udp_meter(datapath)
+            # SW5 — hub switch
+            meter = None
+            if ENABLE_B4:
+                # Install UDP meter before referencing it in flow entries
+                self._install_udp_meter(datapath)
+                meter = UDP_METER_ID
 
             # mgmt <-> server
-            self._add_ip_flows(datapath, ip_mgmt,   ip_server, out_port=2, udp_meter_id=UDP_METER_ID)
-            self._add_ip_flows(datapath, ip_server,  ip_mgmt,  out_port=1, udp_meter_id=UDP_METER_ID)
+            self._add_ip_flows(datapath, ip_mgmt,   ip_server, out_port=2, udp_meter_id=meter)
+            self._add_ip_flows(datapath, ip_server,  ip_mgmt,  out_port=1, udp_meter_id=meter)
 
             # h1 <-> server (via sw3, port 3)
-            self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=2, udp_meter_id=UDP_METER_ID)
-            self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=3, udp_meter_id=UDP_METER_ID)
+            self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=2, udp_meter_id=meter)
+            self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=3, udp_meter_id=meter)
 
             # h2 <-> server (via sw4, port 4)
-            self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=2, udp_meter_id=UDP_METER_ID)
-            self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=4, udp_meter_id=UDP_METER_ID)
+            self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=2, udp_meter_id=meter)
+            self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=4, udp_meter_id=meter)
 
     def _add_ip_flows(self, datapath, ip_src, ip_dst, out_port, udp_meter_id=None):
         """Install TCP, UDP, and ICMP flow entries for a src→dst pair.
