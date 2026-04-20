@@ -45,8 +45,9 @@ if __name__ == '__main__':
     # Use TCLink to support bandwidth and delay parameters
     net = Mininet(topo=topo, controller=RemoteController, switch=OVSSwitch, link=TCLink)
     
-    # Start network
+    # Start network and Pre-populates all ARP tables
     net.start()
+    net.staticArp()
 
     # Enable Spanning Tree Protocol (STP) on the OVS bridges (ovs-vsctl set bridge s1 stp_enable=true)"
     for sw in net.switches:

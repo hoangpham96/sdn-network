@@ -113,6 +113,7 @@ class SDNController(app_manager.RyuApp):
         # Permitted paths (proactive, B1):
         #   h1   <-> sw1 <-> sw3 <-> sw5 <-> server
         #   h2   <-> sw2 <-> sw4 <-> sw5 <-> server  (separate path = basic TE)
+        #   h1   <-> sw1 <-> sw3 <-> sw2 <-> h2
         #   mgmt <-> sw5 <-> server
 
         # ARP is flooded on every switch so hosts can resolve MACs
@@ -129,16 +130,25 @@ class SDNController(app_manager.RyuApp):
             # SW1
             self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=2)
             self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=1)
+            # h1 <-> h2 via sw3
+            self._add_ip_flows(datapath, ip_h1,      ip_h2,    out_port=2)
+            self._add_ip_flows(datapath, ip_h2,      ip_h1,    out_port=1)
 
         elif dpid == 2:
             # SW2 — h2 uses sw4 path (traffic engineering: keeps h1/h2 on separate core links)
             self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=3)
             self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=1)
+            # h1 <-> h2 via sw3
+            self._add_ip_flows(datapath, ip_h1,      ip_h2,    out_port=1)
+            self._add_ip_flows(datapath, ip_h2,      ip_h1,    out_port=2)
 
         elif dpid == 3:
             # SW3 — carries h1 traffic only
             self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=1)
             self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=2)
+            # h1 <-> h2 via sw3
+            self._add_ip_flows(datapath, ip_h1,      ip_h2,    out_port=3)
+            self._add_ip_flows(datapath, ip_h2,      ip_h1,    out_port=2)
 
         elif dpid == 4:
             # SW4 — carries h2 traffic only

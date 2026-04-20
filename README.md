@@ -51,13 +51,23 @@ OpenFlow-based SDN network for an enterprise environment, implemented with Minin
 
 ## Running
 
+**NOTE**: because this implementation does not use the Faucet controller, please run the following command before starting the Ryu Controller to stop the Faucet controller:
+
+```bash
+sudo systemctl stop faucet
+```
+
 ### 1. Start the Ryu controller
+
+In a terminal window, start the Ryu controller with the below command and leave it running
 
 ```bash
 ryu-manager controller.py
 ```
 
 ### 2. Start the Mininet topology (in a separate terminal)
+
+In another terminal window, enable mininet with the pre-configured topology using the following command
 
 ```bash
 sudo python3 topology.py
