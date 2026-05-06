@@ -9,14 +9,6 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet, ethernet, ether_types, ipv4, tcp, udp, arp
 
 # Configuration Constants
-# Set to True to enable B4 traffic engineering (UDP rate-limiting via OpenFlow meter).
-# Set to False to test baseline behaviour without any TE enforcement.
-ENABLE_B4 = False
-
-# Meter ID used to rate-limit UDP traffic on sw5 (B4 traffic engineering)
-UDP_METER_ID = 1
-# UDP rate cap in kbps — 50 Mbps keeps UDP from starving TCP on shared 100 Mbps edge links
-UDP_RATE_KBPS = 50000
 
 # Main Controller Class inheriting from RyuApp
 class SDNController(app_manager.RyuApp):
@@ -63,20 +55,13 @@ class SDNController(app_manager.RyuApp):
         # Proactively install all permitted flow rules for this switch
         self.install_proactive_flows(datapath)
 
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None, meter_id=None):
-        """Send an OFPFlowMod to install a flow entry.
-
-        meter_id: when set, prepends an OFPInstructionMeter so the flow is
-        policed by that meter before the action is applied (used for B4 TE).
-        """
+    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
+        """Send an OFPFlowMod to install a flow entry."""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        # Build instructions: include meter if provided, then actions
-        inst = []
-        if meter_id is not None:
-            inst.append(parser.OFPInstructionMeter(meter_id))
-        inst.append(parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions))
+        # Build instructions: include actions
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
         # Create and send the FlowMod message
         if buffer_id:
@@ -87,29 +72,6 @@ class SDNController(app_manager.RyuApp):
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst)
         datapath.send_msg(mod)
-
-    def _install_udp_meter(self, datapath):
-        """B4: Install an OpenFlow meter on sw5 that drops UDP bytes exceeding UDP_RATE_KBPS.
-
-        All UDP flows on sw5 reference this meter, capping UDP bandwidth and
-        preventing it from crowding out TCP on shared 100 Mbps edge links.
-        """
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-
-        # Define the drop band for the meter
-        bands = [
-            parser.OFPMeterBandDrop(rate=UDP_RATE_KBPS, burst_size=1000)
-        ]
-        # Create and send the MeterMod message
-        meter_mod = parser.OFPMeterMod(
-            datapath=datapath,
-            command=ofproto.OFPMC_ADD,
-            flags=ofproto.OFPMF_KBPS,
-            meter_id=UDP_METER_ID,
-            bands=bands
-        )
-        datapath.send_msg(meter_mod)
 
     def install_proactive_flows(self, datapath):
         """Define and install static flow rules based on the topology."""
@@ -190,24 +152,17 @@ class SDNController(app_manager.RyuApp):
 
         elif dpid == 5:
             # SW5: Hub switch connecting management, server, and core switches
-            # B4: optionally install a meter to rate-limit UDP traffic
-            meter = None
-            if ENABLE_B4:
-                # Install UDP meter before referencing it in flow entries
-                self._install_udp_meter(datapath)
-                meter = UDP_METER_ID
-
             # mgmt <-> server
-            self._add_ip_flows(datapath, ip_mgmt,   ip_server, out_port=2, udp_meter_id=meter)
-            self._add_ip_flows(datapath, ip_server,  ip_mgmt,  out_port=1, udp_meter_id=meter)
+            self._add_ip_flows(datapath, ip_mgmt,   ip_server, out_port=2)
+            self._add_ip_flows(datapath, ip_server,  ip_mgmt,  out_port=1)
 
             # h1 <-> server (via sw3, port 3)
-            self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=2, udp_meter_id=meter)
-            self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=3, udp_meter_id=meter)
+            self._add_ip_flows(datapath, ip_h1,     ip_server, out_port=2)
+            self._add_ip_flows(datapath, ip_server,  ip_h1,    out_port=3)
 
             # h2 <-> server (via sw4, port 4)
-            self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=2, udp_meter_id=meter)
-            self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=4, udp_meter_id=meter)
+            self._add_ip_flows(datapath, ip_h2,     ip_server, out_port=2)
+            self._add_ip_flows(datapath, ip_server,  ip_h2,    out_port=4)
 
             # h1 <-> mgmt (h1 arrives via sw3, port 3)
             self._add_ip_flows(datapath, ip_h1,      ip_mgmt,  out_port=1)
@@ -217,10 +172,9 @@ class SDNController(app_manager.RyuApp):
             self._add_ip_flows(datapath, ip_h2,      ip_mgmt,  out_port=1)
             self._add_ip_flows(datapath, ip_mgmt,    ip_h2,    out_port=4)
 
-    def _add_ip_flows(self, datapath, ip_src, ip_dst, out_port, udp_meter_id=None):
+    def _add_ip_flows(self, datapath, ip_src, ip_dst, out_port):
         """Install TCP, UDP, and ICMP flow entries for a src→dst pair.
 
-        udp_meter_id: when set, attaches a meter to the UDP entry only (B4 TE).
         ICMP flows are added so that ping / pingall (A3) works end-to-end.
         """
         parser = datapath.ofproto_parser
@@ -234,14 +188,13 @@ class SDNController(app_manager.RyuApp):
         )
         self.add_flow(datapath, priority=100, match=match_tcp, actions=actions)
 
-        # UDP (proto 17) — optionally policed by a meter for traffic engineering
+        # UDP (proto 17) — install rule for UDP traffic
         match_udp = parser.OFPMatch(
             eth_type=ether_types.ETH_TYPE_IP,
             ipv4_src=ip_src, ipv4_dst=ip_dst,
             ip_proto=17
         )
-        self.add_flow(datapath, priority=100, match=match_udp, actions=actions,
-                      meter_id=udp_meter_id)
+        self.add_flow(datapath, priority=100, match=match_udp, actions=actions)
 
         # ICMP (proto 1) — required for pingall / A3 topology verification
         match_icmp = parser.OFPMatch(
