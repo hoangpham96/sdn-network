@@ -255,10 +255,11 @@ class SDNController(app_manager.RyuApp):
         """Daemon thread: poll sw5 flow stats every 10 seconds (B2)."""
         while True:
             time.sleep(10)
-            if 5 in self.datapaths:
+            if 5 in self.datapaths: # switch 5
+                # Parse datapath of switch 5
                 datapath = self.datapaths[5]
                 parser = datapath.ofproto_parser
-                # Create a FlowStatsRequest for sw5
+                # Send FlowStatsRequest to sw5 to get flow statistics
                 req = parser.OFPFlowStatsRequest(datapath)
                 datapath.send_msg(req)
 

@@ -24,8 +24,8 @@ OpenFlow-based SDN network for an enterprise environment, implemented with Minin
 
 ### Host / IP / MAC Table
 
-| Host   | IP             | MAC               |
-|--------|---------------|-------------------|
+| Host   | IP            | MAC               |
+| ------ | ------------- | ----------------- |
 | h1     | 10.0.0.1/24   | 00:00:00:00:00:01 |
 | h2     | 10.0.0.2/24   | 00:00:00:00:00:02 |
 | mgmt   | 10.0.0.254/24 | 00:00:00:00:00:03 |
@@ -34,7 +34,7 @@ OpenFlow-based SDN network for an enterprise environment, implemented with Minin
 ### Traffic Paths
 
 - **h1 → server:** h1 – sw1 – sw3 – sw5 – server
-- **h2 → server:** h2 – sw2 – sw4 – sw5 – server *(separate core link for traffic engineering)*
+- **h2 → server:** h2 – sw2 – sw4 – sw5 – server _(separate core link for traffic engineering)_
 - **mgmt → server:** mgmt – sw5 – server
 
 ---
@@ -73,8 +73,6 @@ In another terminal window, enable mininet with the pre-configured topology usin
 sudo python3 topology.py
 ```
 
-STP is enabled automatically on all OVS bridges to prevent forwarding loops.
-
 ---
 
 ## Controller Overview (`controller.py`)
@@ -83,11 +81,11 @@ STP is enabled automatically on all OVS bridges to prevent forwarding loops.
 
 Flow rules are installed **proactively** when each switch connects, based on full topology knowledge. This avoids the latency and complexity of reactive (packet-in) learning.
 
-| Traffic | Action |
-|---------|--------|
-| TCP/UDP/ICMP — h1, h2, mgmt ↔ server | Forwarded on the correct port |
-| ARP | Flooded (priority 10) |
-| Everything else | Dropped (table-miss, priority 0) |
+| Traffic                              | Action                           |
+| ------------------------------------ | -------------------------------- |
+| TCP/UDP/ICMP — h1, h2, mgmt ↔ server | Forwarded on the correct port    |
+| ARP                                  | Flooded (priority 10)            |
+| Everything else                      | Dropped (table-miss, priority 0) |
 
 Separate flow entries are used for TCP (`ip_proto=6`), UDP (`ip_proto=17`), and ICMP (`ip_proto=1`) at priority 100.
 
@@ -109,6 +107,7 @@ ENABLE_B4 = True   # True = rate-limit UDP; False = baseline (no TE)
 When enabled, an OpenFlow **meter** (ID 1, drop band at `UDP_RATE_KBPS = 50000 kbps`) is installed on sw5. All UDP flows on sw5 reference this meter via `OFPInstructionMeter`, capping aggregate UDP throughput at **50 Mbps** and preventing UDP from starving competing TCP flows on the shared 100 Mbps edge links.
 
 To compare before/after:
+
 1. Set `ENABLE_B4 = False` → restart controller → run B3 iperf tests → save `stats.csv`
 2. Set `ENABLE_B4 = True` → restart controller → repeat iperf tests → compare CSVs
 
