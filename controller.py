@@ -63,6 +63,11 @@ class SDNController(app_manager.RyuApp):
         # Proactively install all permitted flow rules for this switch
         self.install_proactive_flows(datapath)
 
+        # Trigger an immediate stats poll for sw5 so the first sample isn't
+        # delayed by the 5-second monitor sleep (fixes missing stats on short iperf runs)
+        if dpid == 5:
+            self._request_stats(datapath)
+
     def add_flow(self, datapath, priority, match, actions, buffer_id=None, meter_id=None):
         """Send an OFPFlowMod to install a flow entry.
 
@@ -251,17 +256,18 @@ class SDNController(app_manager.RyuApp):
         )
         self.add_flow(datapath, priority=100, match=match_icmp, actions=actions)
 
+    def _request_stats(self, datapath):
+        """Send a FlowStatsRequest to the given datapath."""
+        parser = datapath.ofproto_parser
+        req = parser.OFPFlowStatsRequest(datapath)
+        datapath.send_msg(req)
+
     def _monitor(self):
-        """Daemon thread: poll sw5 flow stats every 10 seconds (B2)."""
+        """Daemon thread: poll sw5 flow stats every 5 seconds (B2)."""
         while True:
-            time.sleep(10)
+            time.sleep(5)
             if 5 in self.datapaths: # switch 5
-                # Parse datapath of switch 5
-                datapath = self.datapaths[5]
-                parser = datapath.ofproto_parser
-                # Send FlowStatsRequest to sw5 to get flow statistics
-                req = parser.OFPFlowStatsRequest(datapath)
-                datapath.send_msg(req)
+                self._request_stats(self.datapaths[5])
 
     # Handler for FlowStatsReply messages
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
