@@ -115,22 +115,56 @@ To compare before/after:
 
 ## Traffic Generation (B3)
 
-Run iperf tests from the Mininet CLI after starting both the controller and topology.
+Open xterm windows from the Mininet CLI after starting both the controller and topology:
+
+```
+mininet> xterm h1 h2 server server
+```
+
+This opens four terminal windows: one each for h1 and h2 (iperf servers), and two for server (iperf clients).
 
 ### Run 1 — Moderate UDP Load
 
+In the **h1** xterm (TCP server):
 ```
-mininet> server iperf -s -i 5 &
-mininet> h1 iperf -c 10.0.0.11 -i 5 -t 60 &
-mininet> h2 sleep 20 && iperf -c 10.0.0.11 -u -b 1M -i 5 -t 20 &
+iperf -s -i 5
+```
+
+In the **h2** xterm (UDP server):
+```
+iperf -s -u -i 5
+```
+
+In the first **server** xterm (TCP client → h1):
+```
+iperf -c 10.0.0.1 -i 5 -t 60
+```
+
+In the second **server** xterm (UDP client → h2, delayed 20 s):
+```
+sleep 20 && iperf -c 10.0.0.2 -u -b 1M -i 5 -t 20
 ```
 
 ### Run 2 — High UDP Load
 
+In the **h1** xterm (TCP server):
 ```
-mininet> server iperf -s -i 5 &
-mininet> h1 iperf -c 10.0.0.11 -i 5 -t 60 &
-mininet> h2 sleep 20 && iperf -c 10.0.0.11 -u -b 2G -i 5 -t 20 &
+iperf -s -i 5
+```
+
+In the **h2** xterm (UDP server):
+```
+iperf -s -u -i 5
+```
+
+In the first **server** xterm (TCP client → h1):
+```
+iperf -c 10.0.0.1 -i 5 -t 60
+```
+
+In the second **server** xterm (UDP client → h2, delayed 20 s):
+```
+sleep 20 && iperf -c 10.0.0.2 -u -b 2G -i 5 -t 20
 ```
 
 ---
