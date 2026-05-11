@@ -120,18 +120,18 @@ Run iperf tests from the Mininet CLI after starting both the controller and topo
 ### Run 1 — Moderate UDP Load
 
 ```
-mininet> h1 iperf -c 10.0.0.11 -t 60 &
-mininet> h2 sleep 20 && iperf -c 10.0.0.11 -u -b 1M -t 20 &
+mininet> server iperf -s -i 5 &
+mininet> h1 iperf -c 10.0.0.11 -i 5 -t 60 &
+mininet> h2 sleep 20 && iperf -c 10.0.0.11 -u -b 1M -i 5 -t 20 &
 ```
 
 ### Run 2 — High UDP Load
 
 ```
-mininet> h1 iperf -c 10.0.0.11 -t 60 &
-mininet> h2 sleep 20 && iperf -c 10.0.0.11 -u -b 2G -t 20 &
+mininet> server iperf -s -i 5 &
+mininet> h1 iperf -c 10.0.0.11 -i 5 -t 60 &
+mininet> h2 sleep 20 && iperf -c 10.0.0.11 -u -b 2G -i 5 -t 20 &
 ```
-
-Use `-i 5` on the iperf server side for per-interval throughput reporting.
 
 ---
 
